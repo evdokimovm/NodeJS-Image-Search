@@ -1,4 +1,4 @@
-var Search = require('bing.search');
+var got = require('got');
 
 module.exports = function(app, History, cors) {
 
@@ -6,7 +6,6 @@ module.exports = function(app, History, cors) {
 		// Get images and save query and date.
 		var query = req.params.query;
 		var size = req.query.offset || 10;
-		var search = new Search('API_KEY');
 
 		// Save query and time to the database
 		var history = new History({
@@ -14,25 +13,28 @@ module.exports = function(app, History, cors) {
 			"when": Math.floor(Date.now() / 1000) // Unix Timestamp
 		}).save(function(err, history) {
 			if (err) throw err;
-			console.log('Saved ' + history);
 		});
 
 		// Query the image and populate results
-		search.images(query, {
-				top: size
+		got('https://www.googleapis.com/customsearch/v1', {
+			query: {
+				q: query,
+				searchType: 'image',
+				cx: 'cx',
+				key: 'key',
+				num: size // Valid values are integers between 1 and 10, inclusive https://developers.google.com/custom-search/json-api/v1/reference/cse/list#parameters
 			},
-			function(err, results) {
-				if (err) throw err;
-				res.send(results.map(function(img) {
-					return {
-						"url": img.url,
-						"snippet": img.title,
-						"thumbnail": img.thumbnail.url,
-						"context": img.sourceUrl
-					}
-				}));
-			}
-		);
+			json: true
+		}).then(function(data) {
+			res.send(data.body.items.map(function(img) {
+				return {
+					url: img.link,
+					snippet: img.snippet,
+					thumbnail: img.image.thumbnailLink,
+					context: img.image.contextLink
+				}
+			}));
+		});
 	})
 
 	app.get('/latest', cors(), function(req, res) {
